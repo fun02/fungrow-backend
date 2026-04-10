@@ -68,7 +68,7 @@ def vision():
         img_bytes = file.read()
         img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
         
         payload = {
             "contents": [{
