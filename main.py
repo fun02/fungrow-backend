@@ -29,7 +29,7 @@ def chat():
             return jsonify({"reply": "Pesan kosong."}), 200
 
         # Gunakan model Gemini 1.5 Flash (Tercepat & Stabil)
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/{get_model()}:generateContent?key={API_KEY}"
         
         payload = {
             "contents": [{
