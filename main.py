@@ -7,8 +7,36 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Ambil API KEY dari Railway
 API_KEY = os.getenv("GEMINI_API_KEY")
+
+# 🔥 Model fallback (kalau satu mati, pindah)
+MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-pro"
+]
+
+BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+def call_gemini(payload):
+    for model in MODELS:
+        try:
+            url = f"{BASE_URL}/{model}:generateContent?key={API_KEY}"
+            
+            res = requests.post(url, json=payload, timeout=20)
+            result = res.json()
+
+            print("MODEL:", model)
+            print("STATUS:", res.status_code)
+            print("RESPONSE:", result)
+
+            if res.status_code == 200 and "candidates" in result:
+                return result['candidates'][0]['content']['parts'][0]['text']
+
+        except Exception as e:
+            print("ERROR:", str(e))
+            continue
+
+    return "❌ AI sedang sibuk / error. Coba lagi nanti."
 
 @app.route("/")
 def home():
@@ -18,67 +46,66 @@ def home():
 def chat():
     try:
         if not API_KEY:
-            return jsonify({"reply": "❌ Error: API_KEY belum diset di Railway."}), 500
+            return jsonify({"reply": "❌ API KEY belum diset di Railway"}), 500
 
         data = request.get_json(force=True)
         user_msg = data.get("message", "")
-        
-        # Format URL yang paling stabil
-        # Perhatikan: Nama model ditulis tanpa prefix 'models/' di dalam variabel agar tidak dobel
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={API_KEY}"
-        
+
+        if not user_msg:
+            return jsonify({"reply": "❌ Pesan kosong"}), 400
+
         payload = {
-            "contents": [{
-                "parts": [{"text": user_msg}]
-            }]
+            "contents": [
+                {
+                    "parts": [{"text": user_msg}]
+                }
+            ]
         }
 
-        res = requests.post(url, json=payload, timeout=30)
-        result = res.json()
+        reply = call_gemini(payload)
 
-        if "error" in result:
-            return jsonify({"reply": f"❌ Google Error: {result['error'].get('message')}"}), 200
-
-        if "candidates" in result:
-            reply = result['candidates'][0]['content']['parts'][0]['text']
-            return jsonify({"reply": reply})
-        else:
-            return jsonify({"reply": "⚠️ Google tidak merespon. Cek kuota API Key."}), 200
+        return jsonify({"reply": reply})
 
     except Exception as e:
-        return jsonify({"reply": f"❌ Server Error: {str(e)}"}), 500
+        return jsonify({"reply": f"❌ Server error"}), 500
+
 
 @app.route("/vision", methods=["POST"])
 def vision():
     try:
         if not API_KEY:
-            return jsonify({"reply": "❌ API_KEY belum diset."}), 500
+            return jsonify({"reply": "❌ API KEY belum diset"}), 500
 
         file = request.files.get("file")
+
+        if not file:
+            return jsonify({"reply": "❌ File tidak ditemukan"}), 400
+
         img_base64 = base64.b64encode(file.read()).decode("utf-8")
-        
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={API_KEY}"
-        
+
         payload = {
-            "contents": [{
-                "parts": [
-                    {"text": "Jelaskan gambar ini."},
-                    {"inline_data": {"mime_type": file.mimetype, "data": img_base64}}
-                ]
-            }]
+            "contents": [
+                {
+                    "parts": [
+                        {"text": "Jelaskan gambar ini dengan detail."},
+                        {
+                            "inline_data": {
+                                "mime_type": file.mimetype,
+                                "data": img_base64
+                            }
+                        }
+                    ]
+                }
+            ]
         }
 
-        res = requests.post(url, json=payload, timeout=30)
-        result = res.json()
+        reply = call_gemini(payload)
 
-        if "candidates" in result:
-            reply = result['candidates'][0]['content']['parts'][0]['text']
-            return jsonify({"reply": reply})
-        else:
-            return jsonify({"reply": "❌ Gagal analisis gambar."}), 200
+        return jsonify({"reply": reply})
 
     except Exception as e:
-        return jsonify({"reply": f"❌ Vision Error: {str(e)}"}), 500
+        return jsonify({"reply": "❌ Vision error"}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
