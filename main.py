@@ -8,8 +8,20 @@ app = Flask(__name__)
 # Memberikan izin akses penuh agar frontend bisa memanggil backend
 CORS(app)
 
-# Mengambil API Key dari tab 'Variables' di Railway
-API_KEY = os.getenv("GEMINI_API_KEY")
+
+# =========================
+# MODEL (FIX TERBARU)
+# =========================
+def get_model():
+    return "models/gemini-2.5-flash"
+
+
+# =========================
+# API KEY
+# =========================
+def get_api_key():
+    return os.getenv("GEMINI_API_KEY")
+    
 
 @app.route("/")
 def home():
