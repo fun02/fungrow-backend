@@ -5,23 +5,14 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-# Memberikan izin akses penuh agar frontend bisa memanggil backend
 CORS(app)
 
-
-# =========================
-# MODEL (FIX TERBARU)
-# =========================
-def get_model():
-    return "models/gemini-2.5-flash"
-
-
-# =========================
-# API KEY
-# =========================
-def get_api_key():
-    return os.getenv("GEMINI_API_KEY")
-    
+# ==========================================
+# PENGATURAN API - LANGSUNG DEFINISIKAN DISINI
+# ==========================================
+# Ini memperbaiki error "API_KEY tidak didefinisikan"
+API_KEY = os.getenv("GEMINI_API_KEY")
+MODEL_NAME = "models/gemini-1.5-flash" # Gunakan 1.5 Flash (Stabil)
 
 @app.route("/")
 def home():
@@ -30,7 +21,7 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        # Cek apakah API Key sudah terpasang di Railway
+        # Validasi API KEY
         if not API_KEY:
             return jsonify({"reply": "❌ Error: API_KEY belum diset di Variables Railway."}), 500
 
@@ -40,31 +31,30 @@ def chat():
         if not user_msg:
             return jsonify({"reply": "Pesan kosong."}), 200
 
-        # Gunakan model Gemini 1.5 Flash (Tercepat & Stabil)
-        url = f"https://generativelanguage.googleapis.com/v1beta/{get_model()}:generateContent?key={API_KEY}"
+        # Endpoint menggunakan v1beta agar mendukung fitur terbaru
+        url = f"https://generativelanguage.googleapis.com/v1beta/{MODEL_NAME}:generateContent?key={API_KEY}"
         
         payload = {
-            "contents": [{
-                "parts": [{"text": user_msg}]
-            }]
+            "contents": [{"parts": [{"text": user_msg}]}]
         }
 
         res = requests.post(url, json=payload, timeout=30)
         result = res.json()
 
-        # --- PROTEKSI ERROR 'CANDIDATES' ---
+        # Cek Error dari Google
         if "error" in result:
-            error_msg = result["error"].get("message", "Unknown API Error")
-            return jsonify({"reply": f"❌ Google AI Error: {error_msg}"}), 200
+            return jsonify({"reply": f"❌ Google AI Error: {result['error'].get('message')}"}), 200
 
+        # Ambil Balasan
         if "candidates" in result and len(result["candidates"]) > 0:
             reply = result['candidates'][0]['content']['parts'][0]['text']
             return jsonify({"reply": reply})
         else:
-            return jsonify({"reply": "⚠️ AI tidak memberikan jawaban. Cek kuota API kamu."}), 200
+            return jsonify({"reply": "⚠️ AI tidak merespon. Cek kuota API Key kamu."}), 200
 
     except Exception as e:
-        return jsonify({"reply": f"❌ Server Crash: {str(e)}"}), 500
+        # Menangkap error coding agar tidak crash tanpa pesan
+        return jsonify({"reply": f"❌ Server Error: {str(e)}"}), 500
 
 @app.route("/vision", methods=["POST"])
 def vision():
@@ -74,18 +64,15 @@ def vision():
 
         file = request.files.get("file")
         if not file:
-            return jsonify({"reply": "❌ File gambar tidak ditemukan."}), 400
+            return jsonify({"reply": "❌ Gambar tidak ditemukan."}), 400
 
-        # Encode gambar ke Base64
-        img_bytes = file.read()
-        img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+        img_base64 = base64.b64encode(file.read()).decode("utf-8")
+        url = f"https://generativelanguage.googleapis.com/v1beta/{MODEL_NAME}:generateContent?key={API_KEY}"
         
         payload = {
             "contents": [{
                 "parts": [
-                    {"text": "Tolong jelaskan isi gambar ini untuk keperluan pendidikan."},
+                    {"text": "Tolong jelaskan isi gambar ini."},
                     {"inline_data": {"mime_type": file.mimetype, "data": img_base64}}
                 ]
             }]
@@ -98,12 +85,11 @@ def vision():
             reply = result['candidates'][0]['content']['parts'][0]['text']
             return jsonify({"reply": reply})
         else:
-            return jsonify({"reply": "❌ Gagal menganalisis gambar. Cek API Key."}), 200
+            return jsonify({"reply": "❌ Gagal analisis gambar."}), 200
 
     except Exception as e:
         return jsonify({"reply": f"❌ Vision Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    # Railway menggunakan port dinamis
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
